@@ -503,9 +503,18 @@ namespace Yarn.Unity.Editor
                     var assetPath = AssetDatabase.GetAssetPath(script);
                     var contents = File.ReadAllText(assetPath);
 
+                    // NOTE: walkaround
+                    var emojiQueue = new Queue<string>();
+                    var regex = new Regex(@"([\uD800-\uDBFF])([\uDC00-\uDFFF])");
+                    var replacedContents = regex.Replace(contents, match =>
+                    {
+                        emojiQueue.Enqueue(match.Value);
+                        return "~~emoji~~";
+                    });
+
                     // Produce a version of this file that contains line
                     // tags added where they're needed.
-                    var taggedVersion = Yarn.Compiler.Utility.AddTagsToLines(contents, allExistingTags);
+                    var taggedVersion = Yarn.Compiler.Utility.AddTagsToLines(replacedContents, allExistingTags);
                     
                     // if the file has an error it returns null
                     // we want to bail out then otherwise we'd wipe the yarn file
@@ -513,6 +522,13 @@ namespace Yarn.Unity.Editor
                     {
                         continue;
                     }
+
+                    // NOTE: walkaround
+                    regex = new Regex(@"~~emoji~~");
+                    taggedVersion = regex.Replace(taggedVersion, _ =>
+                    {
+                        return emojiQueue.Dequeue();
+                    });
 
                     // If this produced a modified version of the file,
                     // write it out and re-import it.
