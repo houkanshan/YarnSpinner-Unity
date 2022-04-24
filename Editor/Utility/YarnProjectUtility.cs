@@ -3,6 +3,7 @@ using UnityEditor;
 using System.IO;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using Yarn.Unity;
 
 #if USE_ADDRESSABLES
@@ -358,6 +359,7 @@ namespace Yarn.Unity.Editor
                     // translated version needs to be provided.
                     Text = string.Empty,
                     Language = language,
+                    OriginalText = baseEntry.Text
                 };
                 translatedDictionary.Add(id, newEntry);
                 modificationsNeeded = true;
@@ -372,27 +374,38 @@ namespace Yarn.Unity.Editor
             // First, get the list of IDs that are in both base and
             // translated, and then filter this list to any where the lock
             // values differ
-            var outOfDateLockIDs = baseDictionary.Keys
-                .Intersect(translatedDictionary.Keys)
-                .Where(id => baseDictionary[id].Lock != translatedDictionary[id].Lock);
+            var intersectIDs = baseDictionary.Keys
+                .Intersect(translatedDictionary.Keys);
 
             // Now loop over all of these, and update our translated
             // dictionary to include a note that it needs attention
-            foreach (var id in outOfDateLockIDs)
+            foreach (var id in intersectIDs)
             {
                 // Get the translated entry as it currently exists
                 var entry = translatedDictionary[id];
+                var baseEntry = baseDictionary[id];
 
-                // Include a note that this entry is out of date
-                entry.Text = $"(NEEDS UPDATE) {entry.Text}";
+                // Set OriginalText to tell you it needs update.
+                if (baseDictionary[id].Lock != translatedDictionary[id].Lock)
+                {
+                    entry.OriginalText = $"~~Changed~~ {baseEntry.Text}";
+                    // Update the lock to match the new one
+                    entry.Lock = baseDictionary[id].Lock;
+                    modificationsNeeded = true;
+                }
+                else
+                {
+                    entry.OriginalText = baseEntry.Text;
+                }
 
-                // Update the lock to match the new one
-                entry.Lock = baseDictionary[id].Lock;
+                // Should update line number for both new and old entry. Because we need to sort by it.
+                entry.LineNumber = baseEntry.LineNumber;
+                entry.Node = baseEntry.Node;
+                entry.File = baseEntry.File;
+                entry.Language = language;
 
                 // Put this modified entry back in the table
                 translatedDictionary[id] = entry;
-
-                modificationsNeeded = true;
             }
 
             // We're all done!
@@ -499,9 +512,18 @@ namespace Yarn.Unity.Editor
                     var assetPath = AssetDatabase.GetAssetPath(script);
                     var contents = File.ReadAllText(assetPath);
 
+                    // NOTE: walkaround
+                    var emojiQueue = new Queue<string>();
+                    var regex = new Regex(@"([\uD800-\uDBFF])([\uDC00-\uDFFF])");
+                    var replacedContents = regex.Replace(contents, match =>
+                    {
+                        emojiQueue.Enqueue(match.Value);
+                        return "~~emoji~~";
+                    });
+                    
                     // Produce a version of this file that contains line
                     // tags added where they're needed.
-                    var taggedVersion = Yarn.Compiler.Utility.AddTagsToLines(contents, allExistingTags);
+                    var taggedVersion = Yarn.Compiler.Utility.AddTagsToLines(replacedContents, allExistingTags);
                     
                     // if the file has an error it returns null
                     // we want to bail out then otherwise we'd wipe the yarn file
@@ -509,6 +531,13 @@ namespace Yarn.Unity.Editor
                     {
                         continue;
                     }
+                    
+                    // NOTE: walkaround
+                    regex = new Regex(@"~~emoji~~");
+                    taggedVersion = regex.Replace(taggedVersion, _ =>
+                    {
+                        return emojiQueue.Dequeue();
+                    });
 
                     // If this produced a modified version of the file,
                     // write it out and re-import it.

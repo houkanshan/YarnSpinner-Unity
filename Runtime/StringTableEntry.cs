@@ -73,6 +73,8 @@ namespace Yarn.Unity
         /// </summary>
         public string Comment;
 
+        public string OriginalText;
+
         /// <summary>
         /// Initializes a new instance of the <see cref="StringTableEntry"/>
         /// struct, copying values from an existing instance.
@@ -88,6 +90,7 @@ namespace Yarn.Unity
             Lock = s.Lock;
             Comment = s.Comment;
             Language = s.Language;
+            OriginalText = s.OriginalText;
         }
 
         private static CsvHelper.Configuration.Configuration CsvConfiguration;
@@ -187,13 +190,14 @@ namespace Yarn.Unity
 
                 var fieldNames = new[] {
                     "language",
-                    "id",
                     "text",
+                    "originalText",
+                    "comment",
+                    "id",
                     "file",
                     "node",
                     "lineNumber",
                     "lock",
-                    "comment",
                 };
 
                 foreach (var field in fieldNames)
@@ -206,13 +210,14 @@ namespace Yarn.Unity
                 {
                     var values = new[] {
                         entry.Language,
-                        entry.ID,
                         entry.Text,
+                        entry.OriginalText,
+                        entry.Comment,
+                        entry.ID,
                         entry.File,
                         entry.Node,
                         entry.LineNumber,
                         entry.Lock,
-                        entry.Comment,
                     };
                     foreach (var value in values)
                     {
@@ -251,10 +256,8 @@ namespace Yarn.Unity
             return
                 Language.GetHashCode() ^
                 ID.GetHashCode() ^
-                Text.GetHashCode() ^
+                Text.TrimEnd().GetHashCode() ^
                 File.GetHashCode() ^
-                Node.GetHashCode() ^
-                LineNumber.GetHashCode() ^
                 Lock.GetHashCode() ^
                 Comment.GetHashCode();
         }
